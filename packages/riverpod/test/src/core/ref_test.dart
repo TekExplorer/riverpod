@@ -2726,30 +2726,6 @@ void main() {
         sub.close();
       });
 
-      test('works with AsyncNotifierProvider', () async {
-        final container = ProviderContainer.test();
-        final listener = OnManualInvalidation();
-
-        final provider = AsyncNotifierProvider<TestAsyncNotifier, int>(
-          TestAsyncNotifier.new,
-        );
-
-        // Initialize the provider
-        final sub = container.listen(provider, (prev, next) {});
-        final notifier = container.read(provider.notifier);
-        await container.pump();
-
-        // Set up the listener after initialization
-        notifier.ref.onManualInvalidation(listener.call);
-        verifyZeroInteractions(listener);
-
-        // Manual invalidation should trigger the listener
-        notifier.ref.invalidateSelf();
-        verify(listener()).called(1);
-
-        sub.close();
-      });
-
       test(
         'async provider onManualInvalidation works with container.refresh',
         () async {

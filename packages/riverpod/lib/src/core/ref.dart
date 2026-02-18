@@ -357,10 +357,29 @@ final <yourProvider> = Provider(dependencies: [<dependency>]);
   /// This callback is NOT triggered when:
   /// - A dependency watched with [watch] changes
   ///
+  /// ## Common Use Cases
+  ///
+  /// **Invalidation forwarding**: Forward manual invalidations to upstream providers:
+  /// ```dart
+  /// final sourceProvider = Provider((ref) => 'source data');
+  ///
+  /// final derivedProvider = Provider((ref) {
+  ///   final data = ref.watch(sourceProvider);
+  ///
+  ///   // Forward manual invalidations to the source
+  ///   ref.onManualInvalidation(() {
+  ///     ref.invalidate(sourceProvider);
+  ///   });
+  ///
+  ///   return 'processed: $data';
+  /// });
+  /// ```
+  ///
   /// Returns a function which can be called to remove the listener.
   ///
   /// See also:
-  /// - [invalidateSelf], to invalidate this provider
+  /// - [invalidateSelf], to manually invalidate this provider
+  /// - [invalidate], to manually invalidate other providers
   /// - [refresh], to forcefully re-evaluate a provider
   /// {@endtemplate}
   @experimental
