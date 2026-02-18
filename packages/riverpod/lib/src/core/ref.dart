@@ -50,6 +50,7 @@ sealed class Ref implements MutationTarget {
   List<void Function()>? _onCancelListeners;
   List<void Function()>? _onAddListeners;
   List<void Function()>? _onRemoveListeners;
+  List<void Function()>? _onManualInvalidationListeners;
 
   /// Whether we're initializing this provider for the first time.
   ///
@@ -332,7 +333,36 @@ final <yourProvider> = Provider(dependencies: [<dependency>]);
   void invalidateSelf({bool asReload = false}) {
     _throwIfInvalidUsage();
 
-    _element.invalidateSelf(asReload: asReload);
+    _element.invalidateSelf(asReload: asReload, manual: !asReload);
+  }
+
+  /// {@template riverpod.onManualInvalidation}
+  /// A life-cycle for whenever this provider is manually invalidated, as opposed
+  /// to automatic invalidation caused by dependency changes.
+  ///
+  /// This callback is triggered when:
+  /// - [invalidateSelf] with `asReload: false` (the default)
+  /// - [invalidate] with `asReload: false` (the default) on this provider
+  /// - [refresh] on this provider
+  ///
+  /// This callback is NOT triggered when:
+  /// - A dependency watched with [watch] changes
+  /// - [invalidateSelf] or [invalidate] with `asReload: true`
+  ///
+  /// Returns a function which can be called to remove the listener.
+  ///
+  /// See also:
+  /// - [invalidateSelf], to invalidate this provider
+  /// - [refresh], to forcefully re-evaluate a provider
+  /// {@endtemplate}
+  @experimental
+  RemoveListener onManualInvalidation(void Function() cb) {
+    _throwIfInvalidUsage();
+
+    final list = _onManualInvalidationListeners ??= [];
+    list.add(cb);
+
+    return () => list.remove(cb);
   }
 
   /// Notify dependents that this provider has changed.

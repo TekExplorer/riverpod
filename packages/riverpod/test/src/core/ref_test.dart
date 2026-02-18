@@ -2382,6 +2382,300 @@ void main() {
       });
     });
 
+    group('.onManualInvalidation', () {
+      test('debug: basic functionality check', () {
+        final container = ProviderContainer.test();
+        var callCount = 0;
+        late Ref ref;
+        final provider = Provider((r) {
+          ref = r;
+          ref.onManualInvalidation(() {
+            callCount++;
+          });
+          return 42;
+        });
+
+        container.read(provider);
+        expect(callCount, 0);
+
+        ref.invalidateSelf();
+        expect(callCount, 1);
+      });
+
+      test('is called when invalidateSelf is called with asReload: false', () {
+        final container = ProviderContainer.test();
+        final listener = OnManualInvalidation();
+        var count = 0;
+        late Ref ref;
+        final provider = Provider((r) {
+          ref = r;
+          ref.onManualInvalidation(listener.call);
+          return count++;
+        });
+
+        container.read(provider);
+        verifyZeroInteractions(listener);
+
+        ref.invalidateSelf();
+        verify(listener()).called(1);
+      });
+
+      test(
+        'is called when invalidateSelf is called with asReload: false explicitly',
+        () {
+          final container = ProviderContainer.test();
+          final listener = OnManualInvalidation();
+          var count = 0;
+          late Ref ref;
+          final provider = Provider((r) {
+            ref = r;
+            ref.onManualInvalidation(listener.call);
+            return count++;
+          });
+
+          container.read(provider);
+          verifyZeroInteractions(listener);
+
+          ref.invalidateSelf();
+          verify(listener()).called(1);
+        },
+      );
+
+      test(
+        'is NOT called when invalidateSelf is called with asReload: true',
+        () {
+          final container = ProviderContainer.test();
+          final listener = OnManualInvalidation();
+          var count = 0;
+          late Ref ref;
+          final provider = Provider((r) {
+            ref = r;
+            ref.onManualInvalidation(listener.call);
+            return count++;
+          });
+
+          container.read(provider);
+          verifyZeroInteractions(listener);
+
+          ref.invalidateSelf(asReload: true);
+          verifyZeroInteractions(listener);
+        },
+      );
+
+      test('is called when refresh is called on this provider', () {
+        final container = ProviderContainer.test();
+        final listener = OnManualInvalidation();
+        var count = 0;
+        late Ref ref;
+        final provider = Provider((r) {
+          ref = r;
+          ref.onManualInvalidation(listener.call);
+          return count++;
+        });
+
+        container.read(provider);
+        verifyZeroInteractions(listener);
+
+        container.refresh(provider);
+        verify(listener()).called(1);
+      });
+
+      test(
+        'is called when invalidate is called on this provider with asReload: false',
+        () {
+          final container = ProviderContainer.test();
+          final listener = OnManualInvalidation();
+          var count = 0;
+          late Ref ref;
+          final provider = Provider((r) {
+            ref = r;
+            ref.onManualInvalidation(listener.call);
+            return count++;
+          });
+          final another = Provider((r) => r.read(provider));
+
+          container.read(another);
+          verifyZeroInteractions(listener);
+
+          container.invalidate(provider);
+          verify(listener()).called(1);
+        },
+      );
+
+      test(
+        'is NOT called when invalidate is called on this provider with asReload: true',
+        () {
+          final container = ProviderContainer.test();
+          final listener = OnManualInvalidation();
+          var count = 0;
+          late Ref ref;
+          final provider = Provider((r) {
+            ref = r;
+            ref.onManualInvalidation(listener.call);
+            return count++;
+          });
+          final another = Provider((r) => r.read(provider));
+
+          container.read(another);
+          verifyZeroInteractions(listener);
+
+          container.invalidate(provider, asReload: true);
+          verifyZeroInteractions(listener);
+        },
+      );
+
+      test(
+        'is NOT called when provider is invalidated due to dependency change',
+        () async {
+          final container = ProviderContainer.test();
+          final listener = OnManualInvalidation();
+          final dep = StateProvider((ref) => 0);
+          late Ref ref;
+          final provider = Provider((r) {
+            ref = r;
+            ref.onManualInvalidation(listener.call);
+            return r.watch(dep);
+          });
+
+          container.read(provider);
+          verifyZeroInteractions(listener);
+
+          // Change dependency - this should NOT trigger onManualInvalidation
+          container.read(dep.notifier).state++;
+          await container.pump();
+
+          verifyZeroInteractions(listener);
+        },
+      );
+
+      test('multiple listeners can be registered', () {
+        final container = ProviderContainer.test();
+        final listener1 = OnManualInvalidation();
+        final listener2 = OnManualInvalidation();
+        late Ref ref;
+        final provider = Provider((r) {
+          ref = r;
+          ref.onManualInvalidation(listener1.call);
+          ref.onManualInvalidation(listener2.call);
+          return 42;
+        });
+
+        container.read(provider);
+        verifyZeroInteractions(listener1);
+        verifyZeroInteractions(listener2);
+
+        ref.invalidateSelf();
+
+        verify(listener1()).called(1);
+        verify(listener2()).called(1);
+      });
+
+      test('returns a way to unregister the listener', () {
+        final container = ProviderContainer.test();
+        final listener = OnManualInvalidation();
+        late RemoveListener remove;
+        late Ref ref;
+        final provider = Provider((r) {
+          ref = r;
+          remove = ref.onManualInvalidation(listener.call);
+          return 42;
+        });
+
+        container.read(provider);
+        verifyZeroInteractions(listener);
+
+        // Remove the listener
+        remove();
+
+        // Manual invalidation should not call the removed listener
+        ref.invalidateSelf();
+        verifyZeroInteractions(listener);
+      });
+
+      test('listener can be removed multiple times safely', () {
+        final container = ProviderContainer.test();
+        final listener = OnManualInvalidation();
+        late RemoveListener remove;
+        late Ref ref;
+        final provider = Provider((r) {
+          ref = r;
+          remove = ref.onManualInvalidation(listener.call);
+          return 42;
+        });
+
+        container.read(provider);
+
+        // Remove multiple times should not throw
+        expect(() => remove(), returnsNormally);
+        expect(() => remove(), returnsNormally);
+
+        ref.invalidateSelf();
+        verifyZeroInteractions(listener);
+      });
+
+      test('listener is called during the invalidation synchronously', () {
+        final container = ProviderContainer.test();
+        var listenerCalled = false;
+        late Ref ref;
+        final provider = Provider((r) {
+          ref = r;
+          ref.onManualInvalidation(() {
+            listenerCalled = true;
+          });
+          return 42;
+        });
+
+        container.read(provider);
+        expect(listenerCalled, false);
+
+        ref.invalidateSelf();
+        expect(listenerCalled, true);
+      });
+
+      test('listeners are cleared on provider dispose', () async {
+        final container = ProviderContainer.test();
+        final listener = OnManualInvalidation();
+        late Ref ref;
+        final provider = Provider.autoDispose((r) {
+          ref = r;
+          ref.onManualInvalidation(listener.call);
+          return 42;
+        });
+
+        final sub = container.listen(provider, (prev, next) {});
+        verifyZeroInteractions(listener);
+
+        // Close subscription to dispose the provider
+        sub.close();
+
+        // Wait for dispose to complete
+        await container.pump();
+
+        // Provider should be disposed, so manual invalidation should not work
+        expect(
+          () => ref.invalidateSelf(),
+          throwsA(isA<UnmountedRefException>()),
+        );
+      });
+
+      test('works with family providers', () {
+        final container = ProviderContainer.test();
+        final listener = OnManualInvalidation();
+        late Ref ref;
+        final provider = Provider.family<int, int>((r, id) {
+          ref = r;
+          ref.onManualInvalidation(listener.call);
+          return id * 2;
+        });
+
+        container.read(provider(5));
+        verifyZeroInteractions(listener);
+
+        ref.invalidateSelf();
+        verify(listener()).called(1);
+      });
+    });
+
     group('.onRemoveListener', () {
       test('returns a way to unregister the listener', () {
         final container = ProviderContainer.test();
