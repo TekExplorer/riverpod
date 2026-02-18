@@ -336,9 +336,13 @@ final <yourProvider> = Provider(dependencies: [<dependency>]);
   ///
   /// {@macro riverpod.invalidate}
   void invalidateSelf({bool asReload = false}) {
+    _invalidateSelf(asReload: asReload, manual: true);
+  }
+
+  void _invalidateSelf({required bool asReload, required bool manual}) {
     _throwIfInvalidUsage();
 
-    _element.invalidateSelf(asReload: asReload, manual: !asReload);
+    _element.invalidateSelf(asReload: asReload, manual: manual);
   }
 
   /// {@template riverpod.onManualInvalidation}
@@ -346,13 +350,12 @@ final <yourProvider> = Provider(dependencies: [<dependency>]);
   /// to automatic invalidation caused by dependency changes.
   ///
   /// This callback is triggered when:
-  /// - [invalidateSelf] with `asReload: false` (the default)
-  /// - [invalidate] with `asReload: false` (the default) on this provider
+  /// - [invalidateSelf] is called
+  /// - [invalidate] is called on this provider
   /// - [refresh] on this provider
   ///
   /// This callback is NOT triggered when:
   /// - A dependency watched with [watch] changes
-  /// - [invalidateSelf] or [invalidate] with `asReload: true`
   ///
   /// Returns a function which can be called to remove the listener.
   ///
@@ -689,8 +692,8 @@ final <yourProvider> = Provider(dependencies: [<dependency>]);
     late ProviderSubscription<StateT> sub;
     sub = _element.listen<StateT>(
       listenable,
-      (prev, value) => invalidateSelf(asReload: true),
-      onError: (err, stack) => invalidateSelf(asReload: true),
+      (prev, value) => _invalidateSelf(asReload: true, manual: false),
+      onError: (err, stack) => _invalidateSelf(asReload: true, manual: false),
       onDependencyMayHaveChanged: _element._markDependencyMayHaveChanged,
     );
 

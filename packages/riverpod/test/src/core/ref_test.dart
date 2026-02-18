@@ -2402,7 +2402,7 @@ void main() {
         expect(callCount, 1);
       });
 
-      test('is called when invalidateSelf is called with asReload: false', () {
+      test('is called when invalidateSelf is called', () {
         final container = ProviderContainer.test();
         final listener = OnManualInvalidation();
         var count = 0;
@@ -2419,48 +2419,6 @@ void main() {
         ref.invalidateSelf();
         verify(listener()).called(1);
       });
-
-      test(
-        'is called when invalidateSelf is called with asReload: false explicitly',
-        () {
-          final container = ProviderContainer.test();
-          final listener = OnManualInvalidation();
-          var count = 0;
-          late Ref ref;
-          final provider = Provider((r) {
-            ref = r;
-            ref.onManualInvalidation(listener.call);
-            return count++;
-          });
-
-          container.read(provider);
-          verifyZeroInteractions(listener);
-
-          ref.invalidateSelf();
-          verify(listener()).called(1);
-        },
-      );
-
-      test(
-        'is NOT called when invalidateSelf is called with asReload: true',
-        () {
-          final container = ProviderContainer.test();
-          final listener = OnManualInvalidation();
-          var count = 0;
-          late Ref ref;
-          final provider = Provider((r) {
-            ref = r;
-            ref.onManualInvalidation(listener.call);
-            return count++;
-          });
-
-          container.read(provider);
-          verifyZeroInteractions(listener);
-
-          ref.invalidateSelf(asReload: true);
-          verifyZeroInteractions(listener);
-        },
-      );
 
       test('is called when refresh is called on this provider', () {
         final container = ProviderContainer.test();
@@ -2479,50 +2437,6 @@ void main() {
         container.refresh(provider);
         verify(listener()).called(1);
       });
-
-      test(
-        'is called when invalidate is called on this provider with asReload: false',
-        () {
-          final container = ProviderContainer.test();
-          final listener = OnManualInvalidation();
-          var count = 0;
-          late Ref ref;
-          final provider = Provider((r) {
-            ref = r;
-            ref.onManualInvalidation(listener.call);
-            return count++;
-          });
-          final another = Provider((r) => r.read(provider));
-
-          container.read(another);
-          verifyZeroInteractions(listener);
-
-          container.invalidate(provider);
-          verify(listener()).called(1);
-        },
-      );
-
-      test(
-        'is NOT called when invalidate is called on this provider with asReload: true',
-        () {
-          final container = ProviderContainer.test();
-          final listener = OnManualInvalidation();
-          var count = 0;
-          late Ref ref;
-          final provider = Provider((r) {
-            ref = r;
-            ref.onManualInvalidation(listener.call);
-            return count++;
-          });
-          final another = Provider((r) => r.read(provider));
-
-          container.read(another);
-          verifyZeroInteractions(listener);
-
-          container.invalidate(provider, asReload: true);
-          verifyZeroInteractions(listener);
-        },
-      );
 
       test(
         'is NOT called when provider is invalidated due to dependency change',
@@ -2674,6 +2588,63 @@ void main() {
         ref.invalidateSelf();
         verify(listener()).called(1);
       });
+
+      test('is called when invalidate is called with asReload: true', () {
+        final container = ProviderContainer.test();
+        final listener = OnManualInvalidation();
+        late Ref ref;
+        final provider = Provider((r) {
+          ref = r;
+          ref.onManualInvalidation(listener.call);
+          return 42;
+        });
+
+        container.read(provider);
+        verifyZeroInteractions(listener);
+
+        // asReload should not prevent manual invalidation detection
+        ref.invalidate(provider, asReload: true);
+        verify(listener()).called(1);
+      });
+
+      test('is called when invalidateSelf is called with asReload: true', () {
+        final container = ProviderContainer.test();
+        final listener = OnManualInvalidation();
+        late Ref ref;
+        final provider = Provider((r) {
+          ref = r;
+          ref.onManualInvalidation(listener.call);
+          return 42;
+        });
+
+        container.read(provider);
+        verifyZeroInteractions(listener);
+
+        // asReload should not prevent manual invalidation detection
+        ref.invalidateSelf(asReload: true);
+        verify(listener()).called(1);
+      });
+
+      test(
+        'is called when container.invalidate is called with asReload: true',
+        () {
+          final container = ProviderContainer.test();
+          final listener = OnManualInvalidation();
+          late Ref ref;
+          final provider = Provider((r) {
+            ref = r;
+            ref.onManualInvalidation(listener.call);
+            return 42;
+          });
+
+          container.read(provider);
+          verifyZeroInteractions(listener);
+
+          // asReload should not prevent manual invalidation detection
+          container.invalidate(provider, asReload: true);
+          verify(listener()).called(1);
+        },
+      );
 
       group('invalidation forwarding', () {
         test('basic forwarding from derived to source provider', () async {
