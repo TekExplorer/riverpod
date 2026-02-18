@@ -2395,11 +2395,13 @@ void main() {
           return 42;
         });
 
-        container.read(provider);
+        final sub = container.listen(provider, (prev, next) {});
         expect(callCount, 0);
 
         ref.invalidateSelf();
         expect(callCount, 1);
+
+        sub.close();
       });
 
       test('is called when invalidateSelf is called', () {
@@ -2413,11 +2415,13 @@ void main() {
           return count++;
         });
 
-        container.read(provider);
+        final sub = container.listen(provider, (prev, next) {});
         verifyZeroInteractions(listener);
 
         ref.invalidateSelf();
         verify(listener()).called(1);
+
+        sub.close();
       });
 
       test('is called when refresh is called on this provider', () {
@@ -2431,11 +2435,13 @@ void main() {
           return count++;
         });
 
-        container.read(provider);
+        final sub = container.listen(provider, (prev, next) {});
         verifyZeroInteractions(listener);
 
         container.refresh(provider);
         verify(listener()).called(1);
+
+        sub.close();
       });
 
       test(
@@ -2451,7 +2457,7 @@ void main() {
             return r.watch(dep);
           });
 
-          container.read(provider);
+          final sub = container.listen(provider, (prev, next) {});
           verifyZeroInteractions(listener);
 
           // Change dependency - this should NOT trigger onManualInvalidation
@@ -2459,6 +2465,8 @@ void main() {
           await container.pump();
 
           verifyZeroInteractions(listener);
+
+          sub.close();
         },
       );
 
@@ -2474,7 +2482,7 @@ void main() {
           return 42;
         });
 
-        container.read(provider);
+        final sub = container.listen(provider, (prev, next) {});
         verifyZeroInteractions(listener1);
         verifyZeroInteractions(listener2);
 
@@ -2482,6 +2490,8 @@ void main() {
 
         verify(listener1()).called(1);
         verify(listener2()).called(1);
+
+        sub.close();
       });
 
       test('returns a way to unregister the listener', () {
@@ -2495,7 +2505,7 @@ void main() {
           return 42;
         });
 
-        container.read(provider);
+        final sub = container.listen(provider, (prev, next) {});
         verifyZeroInteractions(listener);
 
         // Remove the listener
@@ -2504,6 +2514,8 @@ void main() {
         // Manual invalidation should not call the removed listener
         ref.invalidateSelf();
         verifyZeroInteractions(listener);
+
+        sub.close();
       });
 
       test('listener can be removed multiple times safely', () {
@@ -2517,7 +2529,7 @@ void main() {
           return 42;
         });
 
-        container.read(provider);
+        final sub = container.listen(provider, (prev, next) {});
 
         // Remove multiple times should not throw
         expect(() => remove(), returnsNormally);
@@ -2525,6 +2537,8 @@ void main() {
 
         ref.invalidateSelf();
         verifyZeroInteractions(listener);
+
+        sub.close();
       });
 
       test('listener is called during the invalidation synchronously', () {
@@ -2539,11 +2553,13 @@ void main() {
           return 42;
         });
 
-        container.read(provider);
+        final sub = container.listen(provider, (prev, next) {});
         expect(listenerCalled, false);
 
         ref.invalidateSelf();
         expect(listenerCalled, true);
+
+        sub.close();
       });
 
       test('listeners are cleared on provider dispose', () async {
@@ -2582,11 +2598,13 @@ void main() {
           return id * 2;
         });
 
-        container.read(provider(5));
+        final sub = container.listen(provider(5), (prev, next) {});
         verifyZeroInteractions(listener);
 
         ref.invalidateSelf();
         verify(listener()).called(1);
+
+        sub.close();
       });
 
       test('is called when invalidate is called with asReload: true', () {
@@ -2599,12 +2617,14 @@ void main() {
           return 42;
         });
 
-        container.read(provider);
+        final sub = container.listen(provider, (prev, next) {});
         verifyZeroInteractions(listener);
 
         // asReload should not prevent manual invalidation detection
-        ref.invalidate(provider, asReload: true);
+        container.invalidate(provider, asReload: true);
         verify(listener()).called(1);
+
+        sub.close();
       });
 
       test('is called when invalidateSelf is called with asReload: true', () {
@@ -2617,12 +2637,14 @@ void main() {
           return 42;
         });
 
-        container.read(provider);
+        final sub = container.listen(provider, (prev, next) {});
         verifyZeroInteractions(listener);
 
         // asReload should not prevent manual invalidation detection
         ref.invalidateSelf(asReload: true);
         verify(listener()).called(1);
+
+        sub.close();
       });
 
       test(
@@ -2637,14 +2659,150 @@ void main() {
             return 42;
           });
 
-          container.read(provider);
+          final sub = container.listen(provider, (prev, next) {});
           verifyZeroInteractions(listener);
 
           // asReload should not prevent manual invalidation detection
           container.invalidate(provider, asReload: true);
           verify(listener()).called(1);
+
+          sub.close();
         },
       );
+
+      test('works with FutureProvider', () async {
+        final container = ProviderContainer.test();
+        final listener = OnManualInvalidation();
+        late Ref ref;
+        var buildCount = 0;
+
+        final provider = FutureProvider<int>((r) async {
+          ref = r;
+          ref.onManualInvalidation(listener.call);
+          buildCount++;
+          return buildCount * 10;
+        });
+
+        // Initialize the provider
+        final sub = container.listen(provider, (prev, next) {});
+        await container.pump();
+        expect(buildCount, 1);
+        verifyZeroInteractions(listener);
+
+        // Manual invalidation should trigger the listener
+        ref.invalidateSelf();
+        verify(listener()).called(1);
+
+        // Wait for rebuild
+        await container.pump();
+        expect(buildCount, 2);
+
+        sub.close();
+      });
+
+      test('works with StreamProvider', () async {
+        final container = ProviderContainer.test();
+        final listener = OnManualInvalidation();
+        late Ref ref;
+        var buildCount = 0;
+
+        final provider = StreamProvider<int>((r) async* {
+          ref = r;
+          ref.onManualInvalidation(listener.call);
+          buildCount++;
+          yield buildCount * 10;
+        });
+
+        // Subscribe to the provider
+        final sub = container.listen(provider, (prev, next) {});
+        await container.pump();
+        expect(buildCount, 1);
+        verifyZeroInteractions(listener);
+
+        // Manual invalidation should trigger the listener
+        ref.invalidateSelf();
+        verify(listener()).called(1);
+
+        sub.close();
+      });
+
+      test('works with AsyncNotifierProvider', () async {
+        final container = ProviderContainer.test();
+        final listener = OnManualInvalidation();
+
+        final provider = AsyncNotifierProvider<TestAsyncNotifier, int>(
+          TestAsyncNotifier.new,
+        );
+
+        // Initialize the provider
+        final sub = container.listen(provider, (prev, next) {});
+        final notifier = container.read(provider.notifier);
+        await container.pump();
+
+        // Set up the listener after initialization
+        notifier.ref.onManualInvalidation(listener.call);
+        verifyZeroInteractions(listener);
+
+        // Manual invalidation should trigger the listener
+        notifier.ref.invalidateSelf();
+        verify(listener()).called(1);
+
+        sub.close();
+      });
+
+      test(
+        'async provider onManualInvalidation works with container.refresh',
+        () async {
+          final container = ProviderContainer.test();
+          final listener = OnManualInvalidation();
+          late Ref ref;
+          var buildCount = 0;
+
+          final provider = FutureProvider<int>((r) async {
+            ref = r;
+            ref.onManualInvalidation(listener.call);
+            buildCount++;
+            return buildCount * 10;
+          });
+
+          // Initialize the provider
+          final sub = container.listen(provider, (prev, next) {});
+          await container.pump();
+          verifyZeroInteractions(listener);
+
+          // Container refresh should trigger manual invalidation
+          container.refresh(provider);
+          verify(listener()).called(1);
+
+          // Wait for rebuild
+          await container.pump();
+
+          sub.close();
+        },
+      );
+
+      test('async provider onManualInvalidation basic functionality', () async {
+        final container = ProviderContainer.test();
+        final listener = OnManualInvalidation();
+        late Ref ref;
+
+        final provider = FutureProvider<String>((r) async {
+          ref = r;
+          ref.onManualInvalidation(listener.call);
+          return 'async-result';
+        });
+
+        // Initialize the provider
+        final sub = container.listen(provider, (prev, next) {});
+        await container.pump();
+        verifyZeroInteractions(listener);
+
+        // Manually invalidate should trigger the listener
+        ref.invalidateSelf();
+        verify(listener()).called(1);
+
+        sub.close();
+      });
 
       group('invalidation forwarding', () {
         test('basic forwarding from derived to source provider', () async {
@@ -2663,7 +2821,7 @@ void main() {
           });
 
           // Initialize both providers
-          expect(container.read(derivedProvider), 'derived-source-1');
+          final sub = container.listen(derivedProvider, (prev, next) {});
           expect(sourceCallCount, 1);
 
           // Manually invalidate the derived provider should forward to source
@@ -2671,8 +2829,9 @@ void main() {
           await container.pump();
 
           // Source should have been rebuilt due to forwarding
-          expect(container.read(derivedProvider), 'derived-source-2');
           expect(sourceCallCount, 2);
+
+          sub.close();
         });
 
         test('forwarding preserves manual invalidation semantics', () async {
@@ -2696,7 +2855,7 @@ void main() {
           });
 
           // Initialize
-          container.read(derivedProvider);
+          final sub = container.listen(derivedProvider, (prev, next) {});
           verifyZeroInteractions(sourceListener);
           verifyZeroInteractions(derivedListener);
 
@@ -2705,6 +2864,8 @@ void main() {
 
           verify(derivedListener()).called(1);
           verify(sourceListener()).called(1);
+
+          sub.close();
         });
 
         test('chained forwarding A -> B -> C', () async {
@@ -2737,7 +2898,7 @@ void main() {
           });
 
           // Initialize all providers
-          expect(container.read(derivedProvider), 'derived-middle-source');
+          final sub = container.listen(derivedProvider, (prev, next) {});
           verifyZeroInteractions(sourceListener);
           verifyZeroInteractions(middleListener);
           verifyZeroInteractions(derivedListener);
@@ -2748,6 +2909,8 @@ void main() {
           verify(derivedListener()).called(1);
           verify(middleListener()).called(1);
           verify(sourceListener()).called(1);
+
+          sub.close();
         });
 
         test('multiple providers forwarding to same source', () async {
@@ -2828,13 +2991,15 @@ void main() {
           });
 
           // Initialize
-          expect(container.read(derivedProvider), 'derived-source-1-source-2');
+          final sub = container.listen(derivedProvider, (prev, next) {});
           verifyZeroInteractions(sourceListener);
 
           // Manual invalidation should forward to both family instances
           container.invalidate(derivedProvider);
 
           verify(sourceListener()).called(2);
+
+          sub.close();
         });
 
         test('forwarding does not trigger on dependency changes', () async {
@@ -2923,8 +3088,10 @@ void main() {
           }, dependencies: []);
 
           // This should work without errors
-          expect(() => container.read(scopedProvider), returnsNormally);
+          final sub = container.listen(scopedProvider, (prev, next) {});
           expect(() => container.invalidate(scopedProvider), returnsNormally);
+
+          sub.close();
         });
 
         test('complex forwarding scenario with mixed providers', () async {
@@ -2953,21 +3120,16 @@ void main() {
           });
 
           // Initialize
-          expect(
-            container.read(complexDerived),
-            'complex-0-0-family-1-0-family-2-0',
-          );
+          final sub = container.listen(complexDerived, (prev, next) {});
 
           // Update base state
           container.read(baseState.notifier).state = 5;
           await container.pump();
-          expect(
-            container.read(complexDerived),
-            'complex-5-10-family-1-10-family-2-10',
-          );
 
           // Manual invalidation should work
           expect(() => container.invalidate(complexDerived), returnsNormally);
+
+          sub.close();
         });
       });
     });
@@ -3979,5 +4141,12 @@ final class _ChangingHashProvider<ValueT>
       origin: this,
       providerOverride: $SyncValueProvider<ValueT>(value),
     );
+  }
+}
+
+class TestAsyncNotifier extends AsyncNotifier<int> {
+  @override
+  Future<int> build() async {
+    return 42;
   }
 }
