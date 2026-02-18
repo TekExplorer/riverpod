@@ -755,12 +755,7 @@ The provider ${_debugCurrentlyBuildingElement!.origin} modified $origin while bu
     _mustRecomputeState = true;
 
     // Call manual invalidation listeners before runOnDispose clears them
-    if (manual) {
-      final onManualInvalidationListeners = ref?._onManualInvalidationListeners;
-      if (onManualInvalidationListeners != null) {
-        _runCallbacks(container, onManualInvalidationListeners);
-      }
-    }
+    if (manual) _runManualInvalidationCallbacks(container, ref);
 
     runOnDispose();
     mayNeedDispose();

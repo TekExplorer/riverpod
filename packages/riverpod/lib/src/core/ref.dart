@@ -51,6 +51,7 @@ sealed class Ref implements MutationTarget {
   List<void Function()>? _onAddListeners;
   List<void Function()>? _onRemoveListeners;
   List<void Function()>? _onManualInvalidationListeners;
+  bool _inManualInvalidationCallback = false;
 
   /// Whether we're initializing this provider for the first time.
   ///
@@ -228,11 +229,13 @@ final <yourProvider> = Provider(dependencies: [<dependency>]);
     return path;
   }
 
-  void _throwIfInvalidUsage() {
-    assert(
-      _debugCallbackStack == 0,
-      'Cannot use Ref or modify other providers inside life-cycles/selectors.',
-    );
+  void _throwIfInvalidUsage({bool skipAssert = false}) {
+    if (!skipAssert) {
+      assert(
+        _debugCallbackStack == 0,
+        'Cannot use Ref or modify other providers inside life-cycles/selectors.',
+      );
+    }
     if (!mounted) {
       throw UnmountedRefException(_element.origin);
     }
@@ -321,7 +324,9 @@ final <yourProvider> = Provider(dependencies: [<dependency>]);
   /// If used on a provider which is not initialized or disposed, this method will have no effect.
   /// {@endtemplate}
   void invalidate(ProviderOrFamily providerOrFamily, {bool asReload = false}) {
-    _throwIfInvalidUsage();
+    // Allow invalidate calls within onManualInvalidation callbacks
+    _throwIfInvalidUsage(skipAssert: _inManualInvalidationCallback);
+
     if (kDebugMode) _debugAssertCanDependOn(providerOrFamily);
 
     container.invalidate(providerOrFamily, asReload: asReload);
@@ -748,6 +753,26 @@ void _runCallbacks(
       }
       container.runGuarded(cb);
     } finally {
+      if (kDebugMode) {
+        _debugCallbackStack--;
+      }
+    }
+  }
+}
+
+void _runManualInvalidationCallbacks(ProviderContainer container, Ref? ref) {
+  final callbacks = ref?._onManualInvalidationListeners;
+  if (ref == null || callbacks == null) return;
+
+  for (final cb in callbacks) {
+    try {
+      if (kDebugMode) {
+        _debugCallbackStack++;
+      }
+      ref._inManualInvalidationCallback = true;
+      container.runGuarded(cb);
+    } finally {
+      ref._inManualInvalidationCallback = false;
       if (kDebugMode) {
         _debugCallbackStack--;
       }
