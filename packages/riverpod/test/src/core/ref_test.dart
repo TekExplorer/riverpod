@@ -3131,6 +3131,65 @@ void main() {
 
           sub.close();
         });
+
+        test('complex forwarding scenario with async providers', () async {
+          final container = ProviderContainer.test();
+          final baseState = StateProvider((ref) => 0);
+
+          final asyncComputed = FutureProvider<int>((ref) {
+            final base = ref.watch(baseState);
+            return Future.value(base * 2);
+          });
+
+          final streamFamily = StreamProvider.family<String, int>((
+            ref,
+            id,
+          ) async* {
+            final computed = await ref.watch(asyncComputed.future);
+            yield 'stream-$id-$computed';
+          });
+
+          final asyncNotifierProvider =
+              AsyncNotifierProvider<TestAsyncNotifier, int>(
+                TestAsyncNotifier.new,
+              );
+
+          final complexAsyncDerived = FutureProvider<String>((ref) async {
+            final base = ref.watch(baseState);
+            final computed = await ref.watch(asyncComputed.future);
+            final stream1 = await ref.watch(streamFamily(1).future);
+            final stream2 = await ref.watch(streamFamily(2).future);
+            final notifierValue = await ref.watch(asyncNotifierProvider.future);
+
+            ref.onManualInvalidation(() {
+              // Forward invalidation to multiple async providers
+              ref.invalidate(asyncComputed);
+              ref.invalidate(streamFamily(1));
+              ref.invalidate(streamFamily(2));
+              ref.invalidate(streamFamily);
+              ref.invalidate(asyncNotifierProvider);
+            });
+
+            return 'async-complex-$base-$computed-$stream1-$stream2-$notifierValue';
+          });
+
+          // Initialize all providers
+          final sub = container.listen(complexAsyncDerived, (prev, next) {});
+          await container.pump();
+
+          // Update base state to trigger dependency changes
+          container.read(baseState.notifier).state = 5;
+          await container.pump();
+
+          // Manual invalidation should work with async forwarding
+          expect(
+            () => container.invalidate(complexAsyncDerived),
+            returnsNormally,
+          );
+          await container.pump();
+
+          sub.close();
+        });
       });
     });
 
