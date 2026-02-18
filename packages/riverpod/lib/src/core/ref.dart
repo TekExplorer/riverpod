@@ -783,7 +783,8 @@ void _runCallbacks(
 }
 
 void _runManualInvalidationCallbacks(ProviderContainer container, Ref? ref) {
-  final callbacks = ref?._onManualInvalidationListeners;
+  // toList() protects against ConcurrentModificationError
+  final callbacks = ref?._onManualInvalidationListeners?.toList();
   if (ref == null || callbacks == null) return;
 
   for (final cb in callbacks) {
